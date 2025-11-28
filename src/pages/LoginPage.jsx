@@ -1,6 +1,7 @@
 import React, { useState, useContext } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
+import axios from 'axios'; // 1. Import standard axios to bypass interceptors
 import axiosInstance from '../utils/axios';
 import { AuthContext } from '../contexts/AuthContent';
 
@@ -8,54 +9,72 @@ const Login = () => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
-    const [rememberMe, setRememberMe] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-
+    const [rememberMe, setRememberMe] = useState(false);
+    
     const navigate = useNavigate();
     const { handleLogin } = useContext(AuthContext);
 
+    // Hardcoded base URL for the login call to ensure it doesn't use the interceptor instance
+    // This matches your settings in utils/axios.js
+    const API_URL = `${axiosInstance}/api/`;
+
     const handleSubmit = async (e) => {
-        // 1. PREVENT DEFAULT FORM SUBMISSION (Stops Reload)
         e.preventDefault();
-        
+        e.stopPropagation();
         setError('');
         setIsLoading(true);
         
         try {
-            const response = await axiosInstance.post('/token/', {
+            // 2. Use standard 'axios' instead of 'axiosInstance'
+            // This prevents the 401 error from triggering the auto-refresh/redirect logic in your interceptor
+            const response = await axios.post(`${API_URL}token/`, {
                 username,
                 password
             });
             
             const accessToken = response.data.access;
             const refreshToken = response.data.refresh;
-
+            
             const storage = rememberMe ? localStorage : sessionStorage;
 
             storage.setItem('access_token', accessToken);
             storage.setItem('refresh_token', refreshToken);
             
+            // 3. Now set the header for future requests using the instance
             axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
             
+            handleLogin(accessToken);
+            
             const decoded = jwtDecode(accessToken);
-
-            handleLogin(accessToken, decoded);
-
             if (decoded.is_staff) {
                 navigate('/admin', { replace: true });
             } else {
                 navigate('/dashboard', { replace: true });
             }
-
         } catch (error) {
             console.error('Login failed:', error);
-            // Handle specific error messages from backend if available
-            const errorMessage = error.response?.data?.detail || 'Login failed. Please check your ID and Password.';
-            setError(errorMessage);
+            
+            // 4. Handle errors without refreshing
+            if (error.response) {
+                // The request was made and the server responded with a status code
+                if (error.response.status === 401) {
+                    setError('Invalid Student ID or Password.');
+                } else {
+                    setError(error.response.data?.detail || 'Login failed. Please check your credentials.');
+                }
+            } else if (error.request) {
+                // The request was made but no response was received
+                setError('Server is not responding. Please check if the backend is running.');
+            } else {
+                // Something happened in setting up the request
+                setError('An unexpected error occurred. Please try again.');
+            }
         } finally {
             setIsLoading(false);
         }
     };
+
 
     return (
         <div className="h-screen w-screen fixed inset-0 flex flex-col md:flex-row overflow-hidden">

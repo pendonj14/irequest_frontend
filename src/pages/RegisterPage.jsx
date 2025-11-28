@@ -165,20 +165,9 @@ const Register = () => {
         try {
             const payload = { ...formData };
             delete payload.confirm_password; 
-           // --- FIX STARTS HERE ---
             if (payload.birth_date) {
-                const date = payload.birth_date; // This is a Date Object
-                
-                // We use getFullYear/getMonth/getDate because they respect your Philippine Time
-                const year = date.getFullYear();
-                // IMPORTANT: getMonth() returns 0-11, so we MUST add 1
-                const month = String(date.getMonth() + 1).padStart(2, '0');
-                const day = String(date.getDate()).padStart(2, '0');
-
-                // Manually build the string "YYYY-MM-DD"
-                // If you picked May 13, this forces "2004-05-13" regardless of UTC
-                payload.birth_date = `${year}-${month}-${day}`;
-            }else {
+                payload.birth_date = payload.birth_date.toISOString().split('T')[0];
+            } else {
                 delete payload.birth_date;
             }
 

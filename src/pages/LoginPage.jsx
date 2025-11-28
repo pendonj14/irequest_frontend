@@ -17,7 +17,7 @@ const Login = () => {
 
     // Hardcoded base URL for the login call to ensure it doesn't use the interceptor instance
     // This matches your settings in utils/axios.js
-    const API_URL = `${axiosInstance}`;
+    const API_URL = `https://irequest-backend.onrender.com/api/`;
 
     const handleSubmit = async (e) => {
         e.preventDefault();

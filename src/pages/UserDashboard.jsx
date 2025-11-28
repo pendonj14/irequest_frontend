@@ -1,13 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react' // Added useRef
 import axiosInstance from '../utils/axios'
 import { jwtDecode } from "jwt-decode"; 
-import { Menu, CreditCard, Image as ImageIcon, Trash2 } from 'lucide-react'; // Added Trash2
+import { Menu, CreditCard, Image as ImageIcon, Trash2, Bell, X, Check } from 'lucide-react'; // Added Bell, X, Check
 import { UserSidebar } from '../components/UserSidebar';
 import RequestDocumentModal from '../components/RequestDocumentModal';
 import UploadPaymentModal from '../components/UploadPaymentModal';
-import DeleteConfirmationModal from '../components/DeleteConfirmationModal'; // Import the modal
+import DeleteConfirmationModal from '../components/DeleteConfirmationModal';
 import useAutoFetchRequests from '../hooks/useAutoFetchRequests';
-import toast from 'react-hot-toast'; // Assuming you use toast for feedback
+import toast from 'react-hot-toast';
 
 function UserDashboard() {
   // --- UI STATE ---
@@ -17,6 +17,11 @@ function UserDashboard() {
   const [selectedPaymentRequest, setSelectedPaymentRequest] = useState(null);
   const [activePage, setActivePage] = useState('Pending');
 
+  // --- NOTIFICATION STATE (New) ---
+  const [notifications, setNotifications] = useState([]);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const prevRequestsRef = useRef([]); // To track previous state for comparison
+
   // --- DELETE STATE ---
   const [deleteState, setDeleteState] = useState({
     isOpen: false,
@@ -25,9 +30,55 @@ function UserDashboard() {
   });
 
   // --- DATA STATE ---
+  // Polling every 3 seconds
   const { requests: myRequests, loading: requestsLoading, refresh } = useAutoFetchRequests(3000);
 
-  // 3. User Profile State
+  // --- NOTIFICATION LOGIC ---
+  useEffect(() => {
+    // Only run comparison if we have previous data and new data
+    if (prevRequestsRef.current.length > 0 && myRequests.length > 0) {
+      const newNotifs = [];
+
+      myRequests.forEach(newReq => {
+        // Find the same request in the previous data
+        const oldReq = prevRequestsRef.current.find(r => r.id === newReq.id);
+
+        // Check if status changed
+        if (oldReq && oldReq.request_status !== newReq.request_status) {
+          newNotifs.push({
+            id: Date.now() + newReq.id, // Unique ID for notification
+            title: 'Status Updated',
+            message: `"${newReq.request}" is now ${newReq.request_status}`,
+            timestamp: new Date(),
+            read: false
+          });
+          
+          // Optional: Toast alert as well
+          toast.success(`Request updated: ${newReq.request_status}`);
+        }
+      });
+
+      if (newNotifs.length > 0) {
+        setNotifications(prev => [...newNotifs, ...prev]);
+      }
+    }
+
+    // Update the ref to the current data for the next render cycle
+    prevRequestsRef.current = myRequests;
+  }, [myRequests]);
+
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  const handleMarkRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  };
+
+  const handleClearNotifications = () => {
+    setNotifications([]);
+    setIsNotifOpen(false);
+  };
+
+  // --- USER PROFILE STATE ---
   const [user, setUser] = useState({ 
     full_name: 'Loading...', 
     program: '', 
@@ -83,17 +134,13 @@ function UserDashboard() {
   const handleConfirmDelete = async () => {
     try {
         if (deleteState.type === 'single') {
-            // API Call for Single Delete
-            // ADJUST ENDPOINT: Assuming /requests/{id}/ delete method
             await axiosInstance.delete(`/requests/${deleteState.data.id}/`);
             toast.success("Record deleted successfully");
         } else if (deleteState.type === 'all') {
-            // API Call for Delete All History
-            // ADJUST ENDPOINT: Assuming a bulk delete endpoint exists
             await axiosInstance.delete(`/requests/delete-history/`); 
             toast.success("History cleared successfully");
         }
-        refresh(); // Refresh list
+        refresh(); 
     } catch (error) {
         console.error("Delete error:", error);
         toast.error("Failed to delete. Please try again.");
@@ -118,8 +165,6 @@ function UserDashboard() {
   });
 
   const isLoading = requestsLoading && profileLoading;
-  
-  // Logic to determine if we are on the page that allows deletion
   const isHistoryPage = activePage === 'Rejected'; 
 
   return (
@@ -155,7 +200,6 @@ function UserDashboard() {
         onSuccess={refresh} 
       />
 
-      {/* DELETE CONFIRMATION MODAL */}
       <DeleteConfirmationModal
         isOpen={deleteState.isOpen}
         onClose={() => setDeleteState({ ...deleteState, isOpen: false })}
@@ -170,7 +214,7 @@ function UserDashboard() {
 
       <main className="relative p-6 md:p-10 md:ml-72 transition-all duration-300 min-h-full">
         
-        <header className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+        <header className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 relative">
             <div className="flex items-center gap-4">
                 <button 
                     onClick={() => setIsSidebarOpen(true)}
@@ -190,16 +234,75 @@ function UserDashboard() {
                 </div>
             </div>
 
-            {/* DELETE ALL BUTTON - Only shows on 'Rejected' (History) page if there are items */}
-            {isHistoryPage && displayedRequests.length > 0 && (
-                <button
-                    onClick={() => openDeleteModal('all')}
-                    className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-xl hover:bg-red-100 hover:border-red-200 transition-all font-semibold text-sm shadow-sm"
-                >
-                    <Trash2 size={16} />
-                    Clear History
-                </button>
-            )}
+            {/* HEADER ACTIONS: Notifications & Clear History */}
+            <div className="flex items-center gap-3 self-end md:self-auto">
+                
+                {/* --- NOTIFICATION BELL --- */}
+                <div className="relative">
+                    <button 
+                        onClick={() => setIsNotifOpen(!isNotifOpen)}
+                        className="p-2 bg-white rounded-xl border border-gray-100 shadow-sm text-gray-600 hover:bg-gray-50 hover:text-[#1a1f63] transition-all relative"
+                    >
+                        <Bell size={20} />
+                        {unreadCount > 0 && (
+                            <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ring-2 ring-white">
+                                {unreadCount}
+                            </span>
+                        )}
+                    </button>
+
+                    {/* Notification Dropdown */}
+                    {isNotifOpen && (
+                        <div className="absolute right-0 mt-3 w-80 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                            <div className="p-4 border-b border-gray-50 flex items-center justify-between bg-gray-50/50">
+                                <h3 className="font-bold text-[#1a1f63]">Notifications</h3>
+                                {notifications.length > 0 && (
+                                    <div className="flex gap-2">
+                                        <button onClick={handleMarkRead} title="Mark all read" className="text-gray-400 hover:text-[#1a1f63]">
+                                            <Check size={16} />
+                                        </button>
+                                        <button onClick={handleClearNotifications} title="Clear all" className="text-gray-400 hover:text-red-500">
+                                            <X size={16} />
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="max-h-[300px] overflow-y-auto">
+                                {notifications.length === 0 ? (
+                                    <div className="p-8 text-center text-gray-400 text-sm">
+                                        No new notifications
+                                    </div>
+                                ) : (
+                                    notifications.map((notif) => (
+                                        <div key={notif.id} className={`p-4 border-b border-gray-50 hover:bg-gray-50 transition-colors ${!notif.read ? 'bg-blue-50/30' : ''}`}>
+                                            <div className="flex justify-between items-start mb-1">
+                                                <span className={`text-xs font-bold ${!notif.read ? 'text-[#1a1f63]' : 'text-gray-500'}`}>
+                                                    {notif.title}
+                                                </span>
+                                                <span className="text-[10px] text-gray-400">
+                                                    {notif.timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                                </span>
+                                            </div>
+                                            <p className="text-sm text-gray-600 leading-snug">{notif.message}</p>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* DELETE ALL BUTTON (History Page Only) */}
+                {isHistoryPage && displayedRequests.length > 0 && (
+                    <button
+                        onClick={() => openDeleteModal('all')}
+                        className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-xl hover:bg-red-100 hover:border-red-200 transition-all font-semibold text-sm shadow-sm"
+                    >
+                        <Trash2 size={16} />
+                        <span className="hidden md:inline">Clear History</span>
+                    </button>
+                )}
+            </div>
         </header>
 
         <div className="space-y-4">
@@ -247,7 +350,7 @@ function UserDashboard() {
                               {isHistoryPage && (
                                   <button
                                       onClick={(e) => {
-                                          e.stopPropagation(); // Prevent triggering other clicks if any
+                                          e.stopPropagation();
                                           openDeleteModal('single', req);
                                       }}
                                       className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"

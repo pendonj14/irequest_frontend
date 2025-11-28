@@ -166,7 +166,12 @@ const Register = () => {
             const payload = { ...formData };
             delete payload.confirm_password; 
             if (payload.birth_date) {
-                payload.birth_date = payload.birth_date.toISOString().split('T')[0];
+                const date = payload.birth_date;
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                
+                payload.birth_date = `${year}-${month}-${day}`;
             } else {
                 delete payload.birth_date;
             }

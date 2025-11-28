@@ -1,8 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from '../utils/axios';
-import DatePicker from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
+// Removed React DatePicker imports
 import { Calendar } from 'lucide-react';
 
 const Register = () => {
@@ -16,7 +15,7 @@ const Register = () => {
         middle_name: '',
         last_name: '',
         extension_name: '',
-        birth_date: null,
+        birth_date: '', // Changed initial state to empty string (was null)
         college_program: '',
         contact_number: ''
     });
@@ -28,12 +27,15 @@ const Register = () => {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const dropdownRef = useRef(null); 
-    const datePickerRef = useRef(null); 
+    const dateInputRef = useRef(null); // Changed ref name for clarity
     
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     
     const navigate = useNavigate();
+
+    // Calculate max date (Today) for the date picker attribute
+    const maxDate = new Date().toISOString().split("T")[0];
 
     useEffect(() => {
         function handleClickOutside(event) {
@@ -121,6 +123,7 @@ const Register = () => {
     const handleProgramSelect = (program) => {
         setFormData(prev => ({ ...prev, college_program: program }));
         setIsDropdownOpen(false);
+        setIsDropdownOpen(false);
         setSearchTerm("");
     };
 
@@ -165,9 +168,11 @@ const Register = () => {
         try {
             const payload = { ...formData };
             delete payload.confirm_password; 
-            if (payload.birth_date) {
-                payload.birth_date = payload.birth_date.toISOString().split('T')[0];
-            } else {
+            
+            // --- LOGIC CHANGE: No Date Conversion Needed ---
+            // Because we are using <input type="date">, payload.birth_date
+            // is ALREADY a string "YYYY-MM-DD". We just send it as is.
+            if (!payload.birth_date) {
                 delete payload.birth_date;
             }
 
@@ -181,7 +186,6 @@ const Register = () => {
             if (err.response && err.response.data) {
                 const data = err.response.data;
                 
-                // SPECIFIC CHECKS FOR USERNAME/EMAIL TO GIVE BETTER MESSAGES
                 if (data.username) {
                     setError("This Student ID Number is already registered.");
                 } 
@@ -192,7 +196,6 @@ const Register = () => {
                     setError(Array.isArray(data.error) ? data.error.join(', ') : data.error);
                 } 
                 else {
-                    // Fallback for other errors
                     const firstKey = Object.keys(data)[0];
                     if (firstKey) {
                         const val = data[firstKey];
@@ -223,6 +226,17 @@ const Register = () => {
             </svg>
         )
     );
+
+    // Helper to open the native date picker
+    const showDatePicker = () => {
+        if (dateInputRef.current) {
+            try {
+                dateInputRef.current.showPicker();
+            } catch (error) {
+                dateInputRef.current.focus();
+            }
+        }
+    };
 
     return (
         <div className="h-screen w-screen fixed inset-0 flex flex-col md:flex-row">
@@ -396,24 +410,23 @@ const Register = () => {
                                         />
                                     </div>
                                     
-                                    {/* Date Picker with Calendar Icon */}
+                                    {/* NATIVE DATE PICKER (FIX FOR -1 DAY) */}
                                     <div className='w-full relative'>
-                                        <DatePicker
-                                            ref={datePickerRef}
-                                            selected={formData.birth_date}
-                                            onChange={(date) => setFormData({ ...formData, birth_date: date })}
-                                            placeholderText="Birth Date"
-                                            className={inputClassName}
-                                            dateFormat="yyyy-MM-dd"
-                                            maxDate={new Date()}
-                                            showMonthDropdown
-                                            showYearDropdown
-                                            dropdownMode="select"
-                                            wrapperClassName="w-full"
+                                        <input
+                                            ref={dateInputRef}
+                                            type="date"
+                                            name="birth_date"
+                                            value={formData.birth_date} // Bind directly to string
+                                            onChange={handleChange}     // Works because name="birth_date"
+                                            max={maxDate}               // Disable future dates
+                                            className={`${inputClassName} appearance-none`} 
+                                            placeholder="Birth Date"
+                                            required
                                         />
+                                        {/* Overlay Icon to trigger picker */}
                                         <button 
                                             type="button"
-                                            onClick={() => datePickerRef.current?.setOpen(true)}
+                                            onClick={showDatePicker}
                                             className="absolute inset-y-0 right-4 flex items-center text-gray-400 hover:text-indigo-950"
                                         >
                                             <Calendar size={20} />
